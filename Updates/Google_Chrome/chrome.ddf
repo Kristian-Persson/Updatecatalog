@@ -1,0 +1,7 @@
+.Set CabinetNameTemplate=ChromeUpdate.cab
+.Set DiskDirectory1=C:\Users\krist\OneDrive\Dokument\Project\Update_Catalog_Automation\Updates\Google_Chrome
+.Set MaxDiskSize=1000000000
+.Set CompressionType=MSZIP
+.Set Cabinet=on
+.Set Compress=on
+"C:\Users\krist\OneDrive\Dokument\Project\Update_Catalog_Automation\Updates\Google_Chrome\googlechromestandaloneenterprise64.msi"

@@ -1,0 +1,7 @@
+.Set CabinetNameTemplate=7zip.cab
+.Set DiskDirectory1=C:\Users\krist\OneDrive\Dokument\Project\Update_Catalog_Automation\Updates\7Zip
+.Set MaxDiskSize=1000000000
+.Set CompressionType=MSZIP
+.Set Cabinet=on
+.Set Compress=on
+"C:\Users\krist\OneDrive\Dokument\Project\Update_Catalog_Automation\Updates\7Zip\7z2409-x64.msi"
