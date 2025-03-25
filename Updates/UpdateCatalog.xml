@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UpdatesCatalog>
+  <Publisher>Automated Update Catalog</Publisher>
+  <DisplayName>Automated Update Catalog</DisplayName>
+  <Description>Automated 3:d party update catalog.</Description>
+  <SupportUrl>https://kristian-persson.github.io/Updatecatalog/support</SupportUrl>
+  <MoreInfoUrl>https://kristian-persson.github.io/Updatecatalog/moreinfo</MoreInfoUrl>
+  <Updates>
+    <Update>
+      <Title>Google Chrome Enterprise</Title>
+      <Description>Latest Google Chrome MSI.</Description>
+      <DownloadUrl>https://kristian-persson.github.io/Updatecatalog/updates/Google/GoogleChromeUpdate.cab</DownloadUrl>
+      <SHA256>1234567890abcdef...</SHA256>
+    </Update>
+  </Updates>
+</UpdatesCatalog>
