@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <UpdatesCatalog>
   <Publisher>Automated Update Catalog</Publisher>
   <DisplayName>Automated Update Catalog</DisplayName>
@@ -13,4 +13,5 @@
       <SHA256>1234567890abcdef...</SHA256>
     </Update>
   </Updates>
+  <Update Name="Google Chrome" Version="2025.03.28" DownloadURL="https://updatecatalog.blob.core.windows.net//chrome_update.cab" />
 </UpdatesCatalog>
