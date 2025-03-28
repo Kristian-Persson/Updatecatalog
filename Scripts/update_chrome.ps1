@@ -2,7 +2,7 @@
 $chromeUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $downloadPath = "$env:GITHUB_WORKSPACE\chrome.msi"
 $cabFilePath = "$env:GITHUB_WORKSPACE\chrome_update.cab"
-$xmlFilePath = "$env:GITHUB_WORKSPACE\UpdatesCatalog\updatescatalog.xml"
+$xmlFilePath = "$env:GITHUB_WORKSPACE\Updates\updatescatalog.xml"
 
 # Download the latest Google Chrome MSI
 Write-Host "Downloading latest Google Chrome MSI..."
