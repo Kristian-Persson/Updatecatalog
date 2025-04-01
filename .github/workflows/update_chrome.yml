@@ -10,65 +10,70 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository
+      - name: 🛠 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Install Azure CLI
+      - name: 🔹 Install Azure CLI
         run: |
           Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile AzureCLI.msi
           Start-Process msiexec.exe -ArgumentList "/i AzureCLI.msi /quiet /norestart" -Wait
+          az --version  # Verify Azure CLI installation
+        shell: pwsh
 
-      - name: Set up Git
+      - name: 🔹 Set up Git
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "github-actions@github.com"
+        shell: pwsh
 
-      - name: Run update_chrome.ps1
-        run: pwsh Scripts/update_chrome.ps1
+      - name: 🚀 Run update_chrome.ps1
+        run: pwsh ./Scripts/update_chrome.ps1
         env:
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
           AZURE_STORAGE_CONTAINER_NAME: ${{ secrets.AZURE_CONTAINER_NAME }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+        shell: pwsh
 
-      - name: Debug - Check if Chrome CAB File Exists
+      - name: 🔎 Debug - Check if Chrome CAB File Exists
         run: |
           if (Test-Path -Path "chrome_update.cab") {
               Write-Host "✅ chrome_update.cab exists!"
           } else {
               Write-Error "❌ ERROR: chrome_update.cab does NOT exist. The upload will fail!"
+              exit 1
           }
         shell: pwsh
 
-      - name: Upload Chrome CAB to Azure
+      - name: 📤 Upload Chrome CAB to Azure
         run: |
           az storage blob upload `
-            --container-name ${{ secrets.AZURE_CONTAINER_NAME }} `
-            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} `
-            --account-key ${{ secrets.AZURE_STORAGE_KEY }} `
+            --container-name "${{ secrets.AZURE_CONTAINER_NAME }}" `
+            --account-name "${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" `
+            --account-key "${{ secrets.AZURE_STORAGE_KEY }}" `
             --file "chrome_update.cab" `
             --name "chrome_update.cab" `
             --overwrite
         shell: pwsh
 
-      - name: Debug - Verify Blob Upload
+      - name: 🔎 Debug - Verify Blob Upload
         run: |
           az storage blob show `
-            --container-name ${{ secrets.AZURE_CONTAINER_NAME }} `
+            --container-name "${{ secrets.AZURE_CONTAINER_NAME }}" `
             --name "chrome_update.cab" `
-            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} `
-            --account-key ${{ secrets.AZURE_STORAGE_KEY }}
+            --account-name "${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" `
+            --account-key "${{ secrets.AZURE_STORAGE_KEY }}"
         shell: pwsh
 
-      - name: Update updatescatalog.xml in GitHub
+      - name: 📂 Update updatescatalog.xml in GitHub
         run: |
-          pwsh scripts/update_catalog.ps1
+          pwsh ./Scripts/update_catalog.ps1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
 
-      - name: Commit and Push updatescatalog.xml
+      - name: 🔄 Commit and Push updatescatalog.xml
         run: |
           git add UpdatesCatalog/updatescatalog.xml
-          git commit -m "🔄 Auto-update updatescatalog.xml with new Chrome version"
+          git commit -m "🔄 Auto-update updatescatalog.xml with new Chrome version" || echo "No changes to commit"
           git push
         shell: pwsh
