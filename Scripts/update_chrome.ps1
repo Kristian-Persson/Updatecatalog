@@ -6,7 +6,7 @@ $localChromePath = "chrome_update.exe"
 $localCabPath = "chrome_update.cab"
 $versionFilePath = "latest_chrome_version.txt"
 $xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
-$githubRawURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/$xmlFilePath"
+$githubRawURL = "https://raw.githubusercontent.com/Kristian-Persson/Updatecatalog/main/$xmlFilePath"
 
 # 🛠 Funktion för att hämta version från XML-filen på GitHub
 function Get-ChromeVersionFromXML {
