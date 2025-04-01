@@ -1,4 +1,4 @@
-name: Update Chrome and Upload to Azure
+name: Test Path
 
 on:
   workflow_dispatch:  # Allows manual triggering
