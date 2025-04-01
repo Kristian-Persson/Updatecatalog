@@ -1,0 +1,10 @@
+- name: Debug - Check if update_catalog.ps1 exists
+  run: |
+    if (Test-Path -Path "./Scripts/update_catalog.ps1") {
+      Write-Host "✅ update_catalog.ps1 found!"
+      pwsh ./Scripts/update_catalog.ps1
+    } else {
+      Write-Error "❌ ERROR: update_catalog.ps1 NOT found!"
+      exit 1
+    }
+  shell: pwsh
