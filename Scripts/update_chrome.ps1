@@ -1,41 +1,38 @@
-# Variables
-$chromeUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-$downloadPath = "$env:GITHUB_WORKSPACE\chrome.msi"
-$cabFilePath = "$env:GITHUB_WORKSPACE\chrome_update.cab"
-$xmlFilePath = "$env:GITHUB_WORKSPACE\Updates\updatescatalog.xml"
+# update_chrome.ps1
+# Uppdaterar Google Chrome om det finns en ny version
 
-# Download the latest Google Chrome MSI
-Write-Host "Downloading latest Google Chrome MSI..."
-Invoke-WebRequest -Uri $chromeUrl -OutFile $downloadPath
+$chromeDownloadURL = "https://dl.google.com/update2/installers/ChromeSetup.exe"
+$localChromePath = "chrome_update.exe"
+$localCabPath = "chrome_update.cab"
+$versionFilePath = "latest_chrome_version.txt"
 
-# Create a .CAB file from the MSI
-Write-Host "Creating .CAB file..."
-makecab /D CompressionType=LZX /D CompressionMemory=21 /D CabinetName1=chrome_update.cab $downloadPath $cabFilePath
+# Hämta nuvarande installerad version av Chrome
+$installedVersion = (Get-Item "C:\Program Files\Google\Chrome\Application\chrome.exe").VersionInfo.FileVersion
 
-# Upload to Azure Blob Storage
-Write-Host "Uploading to Azure..."
-az storage blob upload --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
-  --container-name $env:AZURE_CONTAINER_NAME `
-  --file $cabFilePath `
-  --name "chrome_update.cab" `
-  --account-key $env:AZURE_STORAGE_KEY
+# Hämta senaste tillgängliga versionen av Chrome
+$latestVersion = Invoke-RestMethod -Uri "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest" | Select-Object -ExpandProperty version
 
-# Update updatescatalog.xml
-Write-Host "Updating updatescatalog.xml..."
-[xml]$xml = Get-Content $xmlFilePath
-$updateNode = $xml.CreateElement("Update")
-$updateNode.SetAttribute("Name", "Google Chrome")
-$updateNode.SetAttribute("Version", (Get-Date -Format "yyyy.MM.dd"))
-$updateNode.SetAttribute("DownloadURL", "https://$env:AZURE_STORAGE_ACCOUNT_NAME.blob.core.windows.net/$env:AZURE_CONTAINER_NAME/chrome_update.cab")
-$xml.DocumentElement.AppendChild($updateNode) | Out-Null
-$xml.Save($xmlFilePath)
+Write-Host "Installerad version: $installedVersion"
+Write-Host "Senaste version: $latestVersion"
 
-Write-Host "Updates catalog XML updated!"
+if ($installedVersion -ne $latestVersion) {
+    Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
 
-# Commit & Push updatescatalog.xml to GitHub
-Write-Host "Committing and pushing updatescatalog.xml to GitHub..."
-git config --global user.name "GitHub Actions Bot"
-git config --global user.email "github-actions@github.com"
-git add $xmlFilePath
-git commit -m "Updated Chrome version $(Get-Date -Format 'yyyy.MM.dd') in updatescatalog.xml"
-git push
+    # Ladda ner Chrome-installationsfilen
+    Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
+
+    # Skapa en CAB-fil från installationsfilen
+    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
+
+    # Byt namn på CAB-filen till rätt format (chrome_update_<version>.cab)
+    $newCabName = "chrome_update_$latestVersion.cab"
+    Rename-Item -Path $localCabPath -NewName $newCabName
+
+    # Spara den senaste versionen till en fil (används i update_catalog.ps1)
+    Set-Content -Path $versionFilePath -Value $latestVersion
+
+    Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
+    Write-Host "✅ Sparade senaste versionen i $versionFilePath"
+} else {
+    Write-Host "✅ Chrome är redan uppdaterad. Ingen åtgärd krävs."
+}
