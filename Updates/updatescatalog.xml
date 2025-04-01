@@ -17,4 +17,5 @@
   <Update Name="Google Chrome" Version="2025.03.29" DownloadURL="https://updatecatalog.blob.core.windows.net//chrome_update.cab" />
   <Update Name="Google Chrome" Version="2025.03.30" DownloadURL="https://updatecatalog.blob.core.windows.net//chrome_update.cab" />
   <Update Name="Google Chrome" Version="2025.03.31" DownloadURL="https://updatecatalog.blob.core.windows.net//chrome_update.cab" />
+  <Update Name="Google Chrome" Version="2025.04.01" DownloadURL="https://updatecatalog.blob.core.windows.net//chrome_update.cab" />
 </UpdatesCatalog>
