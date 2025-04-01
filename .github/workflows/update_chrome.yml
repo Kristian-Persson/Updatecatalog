@@ -34,26 +34,27 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         shell: pwsh
 
-      - name: 🔎 Debug - Check if Chrome CAB File Exists
-        run: |
-          if (Test-Path -Path "chrome_update.cab") {
-              Write-Host "✅ chrome_update.cab exists!"
-          } else {
-              Write-Error "❌ ERROR: chrome_update.cab does NOT exist. The upload will fail!"
-              exit 1
-          }
-        shell: pwsh
+- name: Debug - Check if Chrome CAB File Exists
+  run: |
+    if (Test-Path -Path "$(Get-Content latest_chrome_version.txt)") {
+        Write-Host "✅ CAB-filen finns!"
+    } else {
+        Write-Error "❌ ERROR: CAB-filen hittades inte!"
+    }
+  shell: pwsh
 
-      - name: 📤 Upload Chrome CAB to Azure
-        run: |
-          az storage blob upload `
-            --container-name "${{ secrets.AZURE_CONTAINER_NAME }}" `
-            --account-name "${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" `
-            --account-key "${{ secrets.AZURE_STORAGE_KEY }}" `
-            --file "chrome_update.cab" `
-            --name "chrome_update.cab" `
-            --overwrite
-        shell: pwsh
+- name: Upload Chrome CAB to Azure
+  run: |
+    $latestVersion = Get-Content latest_chrome_version.txt
+    $cabFileName = "chrome_update_$latestVersion.cab"
+    az storage blob upload `
+      --container-name ${{ secrets.AZURE_CONTAINER_NAME }} `
+      --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} `
+      --account-key ${{ secrets.AZURE_STORAGE_KEY }} `
+      --file "$cabFileName" `
+      --name "$cabFileName" `
+      --overwrite
+  shell: pwsh
 
       - name: 🔎 Debug - Verify Blob Upload
         run: |
