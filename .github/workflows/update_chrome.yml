@@ -8,6 +8,7 @@ on:
 jobs:
   update_chrome:
     runs-on: windows-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -23,9 +24,51 @@ jobs:
           git config --global user.email "github-actions@github.com"
 
       - name: Run Update Script
-        shell: pwsh
-        run: ./scripts/update_chrome.ps1  # Corrected path to the script
+        run: pwsh scripts/update_chrome.ps1
         env:
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
           AZURE_STORAGE_CONTAINER_NAME: ${{ secrets.AZURE_CONTAINER_NAME }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+
+      - name: Debug - Check if Chrome CAB File Exists
+        run: |
+          if (Test-Path -Path "chrome_update.cab") {
+              Write-Host "✅ chrome_update.cab exists!"
+          } else {
+              Write-Error "❌ ERROR: chrome_update.cab does NOT exist. The upload will fail!"
+          }
+        shell: pwsh
+
+      - name: Upload Chrome CAB to Azure
+        run: |
+          az storage blob upload `
+            --container-name ${{ secrets.AZURE_CONTAINER_NAME }} `
+            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} `
+            --account-key ${{ secrets.AZURE_STORAGE_KEY }} `
+            --file "chrome_update.cab" `
+            --name "chrome_update.cab" `
+            --overwrite
+        shell: pwsh
+
+      - name: Debug - Verify Blob Upload
+        run: |
+          az storage blob show `
+            --container-name ${{ secrets.AZURE_CONTAINER_NAME }} `
+            --name "chrome_update.cab" `
+            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} `
+            --account-key ${{ secrets.AZURE_STORAGE_KEY }}
+        shell: pwsh
+
+      - name: Update updatescatalog.xml in GitHub
+        run: |
+          pwsh scripts/update_catalog.ps1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+
+      - name: Commit and Push updatescatalog.xml
+        run: |
+          git add UpdatesCatalog/updatescatalog.xml
+          git commit -m "🔄 Auto-update updatescatalog.xml with new Chrome version"
+          git push
+        shell: pwsh
