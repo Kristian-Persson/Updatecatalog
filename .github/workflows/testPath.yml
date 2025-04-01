@@ -1,4 +1,11 @@
-- name: Debug - Check if update_catalog.ps1 exists
+name: Update Chrome and Upload to Azure
+
+on:
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  update_chrome:
+    runs-on: windows-latest- name: Debug - Check if update_catalog.ps1 exists
   run: |
     if (Test-Path -Path "./Scripts/update_catalog.ps1") {
       Write-Host "✅ update_catalog.ps1 found!"
