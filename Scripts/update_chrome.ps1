@@ -3,12 +3,11 @@
 
 $chromeDownloadURL = "https://dl.google.com/update2/installers/ChromeSetup.exe"
 $localChromePath = "chrome_update.exe"
-$localCabPath = "chrome_update.cab"
 $versionFilePath = "latest_chrome_version.txt"
 $xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
-$githubRawURL = "https://raw.githubusercontent.com/Kristian-Persson/Updatecatalog/main/$xmlFilePath"
+$githubRawURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/$xmlFilePath"
 
-# 🛠 Funktion för att hämta version från XML-filen på GitHub
+# 🛠 Funktion för att hämta version från XML-filen i GitHub
 function Get-ChromeVersionFromXML {
     param ($xmlUrl)
     
@@ -55,22 +54,19 @@ if ($latestVersion -ne $githubVersion) {
 
     # 🛠 Skapa en CAB-fil från installationsfilen
     Write-Host "📦 Skapar CAB-fil..."
-    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
+    $cabFileName = "chrome_update_$latestVersion.cab"
+    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $cabFileName
 
     # ✅ Kontrollera att CAB-filen skapades
-    if (-Not (Test-Path -Path $localCabPath)) {
+    if (-Not (Test-Path -Path $cabFileName)) {
         Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
         exit 1
     }
 
-    # 🛠 Byt namn på CAB-filen till rätt format
-    $newCabName = "chrome_update_$latestVersion.cab"
-    Rename-Item -Path $localCabPath -NewName $newCabName
-
     # 🛠 Spara den senaste versionen i en fil
     Set-Content -Path $versionFilePath -Value $latestVersion
 
-    Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
+    Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $cabFileName"
     Write-Host "✅ Sparade senaste versionen i $versionFilePath"
 } else {
     Write-Host "✅ Chrome i GitHub är redan den senaste versionen. Ingen uppdatering krävs."
