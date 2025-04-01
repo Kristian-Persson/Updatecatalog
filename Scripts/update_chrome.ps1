@@ -5,43 +5,73 @@ $chromeDownloadURL = "https://dl.google.com/update2/installers/ChromeSetup.exe"
 $localChromePath = "chrome_update.exe"
 $localCabPath = "chrome_update.cab"
 $versionFilePath = "latest_chrome_version.txt"
-$azureVersionFileURL = "https://updatecatalog.blob.core.windows.net/updatecatalog/latest_chrome_version.txt"
+$xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
+$githubRawURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/$xmlFilePath"
 
-# Hämta nuvarande version som finns på Azure
-Write-Host "🔄 Hämtar nuvarande version från Azure..."
-try {
-    $azureVersion = Invoke-WebRequest -Uri $azureVersionFileURL -UseBasicParsing | Select-Object -ExpandProperty Content
-} catch {
-    Write-Host "⚠️ Kunde inte hämta nuvarande version från Azure. Antas vara första gången."
-    $azureVersion = "0.0.0.0"
+# 🛠 Funktion för att hämta version från XML-filen på GitHub
+function Get-ChromeVersionFromXML {
+    param ($xmlUrl)
+    
+    try {
+        Write-Host "🔄 Hämtar nuvarande version från XML-filen i GitHub..."
+        $xmlContent = [xml](Invoke-WebRequest -Uri $xmlUrl -UseBasicParsing).Content
+        $chromeVersion = $xmlContent.catalog.package | Where-Object { $_.name -match "chrome_update_" } | Select-Object -ExpandProperty version
+
+        if ($chromeVersion) {
+            return $chromeVersion
+        } else {
+            Write-Host "⚠️ Ingen Chrome-version hittades i XML-filen."
+            return "0.0.0.0"
+        }
+    } catch {
+        Write-Host "⚠️ Kunde inte hämta XML-filen från GitHub. Antar att det är första gången."
+        return "0.0.0.0"
+    }
 }
 
-# Hämta senaste Chrome-version från Google
+# 🛠 Hämta nuvarande version från XML-filen (GitHub)
+$githubVersion = Get-ChromeVersionFromXML -xmlUrl $githubRawURL
+
+# 🔍 Hämta senaste Chrome-version från Google
 Write-Host "🔄 Hämtar senaste Chrome-version från Google..."
-$chromeVersions = Invoke-RestMethod -Uri "https://omahaproxy.appspot.com/all.json" -UseBasicParsing
-$latestVersion = ($chromeVersions | Where-Object { $_.os -eq "win64" -and $_.channel -eq "stable" }).version
+$chromeData = Invoke-RestMethod -Uri "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" -UseBasicParsing
+$latestVersion = $chromeData.channels.Stable.version
 
 Write-Host "🌍 Senaste Chrome-version: $latestVersion"
-Write-Host "☁️ Version på Azure: $azureVersion"
+Write-Host "📄 Version i XML-filen (GitHub): $githubVersion"
 
-if ($latestVersion -ne $azureVersion) {
+# 🔄 Jämför versionerna
+if ($latestVersion -ne $githubVersion) {
     Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
 
-    # Ladda ner Chrome-installationsfilen
+    # 🛠 Ladda ner Chrome-installationsfilen
     Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
 
-    # Skapa en CAB-fil från installationsfilen
+    # ✅ Kontrollera att filen laddades ner korrekt
+    if (-Not (Test-Path -Path $localChromePath)) {
+        Write-Error "❌ ERROR: Chrome installationsfilen laddades INTE ner korrekt!"
+        exit 1
+    }
+
+    # 🛠 Skapa en CAB-fil från installationsfilen
+    Write-Host "📦 Skapar CAB-fil..."
     makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
 
-    # Byt namn på CAB-filen till rätt format
+    # ✅ Kontrollera att CAB-filen skapades
+    if (-Not (Test-Path -Path $localCabPath)) {
+        Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
+        exit 1
+    }
+
+    # 🛠 Byt namn på CAB-filen till rätt format
     $newCabName = "chrome_update_$latestVersion.cab"
     Rename-Item -Path $localCabPath -NewName $newCabName
 
-    # Spara den senaste versionen till en fil (används i update_catalog.ps1)
+    # 🛠 Spara den senaste versionen i en fil
     Set-Content -Path $versionFilePath -Value $latestVersion
 
     Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
     Write-Host "✅ Sparade senaste versionen i $versionFilePath"
 } else {
-    Write-Host "✅ Chrome på Azure är redan den senaste versionen. Ingen uppdatering krävs."
+    Write-Host "✅ Chrome i GitHub är redan den senaste versionen. Ingen uppdatering krävs."
 }
