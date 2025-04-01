@@ -5,17 +5,26 @@ $chromeDownloadURL = "https://dl.google.com/update2/installers/ChromeSetup.exe"
 $localChromePath = "chrome_update.exe"
 $localCabPath = "chrome_update.cab"
 $versionFilePath = "latest_chrome_version.txt"
+$azureVersionFileURL = "https://updatecatalog.blob.core.windows.net/updatecatalog/latest_chrome_version.txt"
 
-# Hämta nuvarande installerad version av Chrome
-$installedVersion = (Get-Item "C:\Program Files\Google\Chrome\Application\chrome.exe").VersionInfo.FileVersion
+# Hämta nuvarande version som finns på Azure
+Write-Host "🔄 Hämtar nuvarande version från Azure..."
+try {
+    $azureVersion = Invoke-WebRequest -Uri $azureVersionFileURL -UseBasicParsing | Select-Object -ExpandProperty Content
+} catch {
+    Write-Host "⚠️ Kunde inte hämta nuvarande version från Azure. Antas vara första gången."
+    $azureVersion = "0.0.0.0"
+}
 
-# Hämta senaste tillgängliga versionen av Chrome
-$latestVersion = Invoke-RestMethod -Uri "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest" | Select-Object -ExpandProperty version
+# Hämta senaste Chrome-version från Google
+Write-Host "🔄 Hämtar senaste Chrome-version från Google..."
+$chromeVersions = Invoke-RestMethod -Uri "https://omahaproxy.appspot.com/all.json" -UseBasicParsing
+$latestVersion = ($chromeVersions | Where-Object { $_.os -eq "win64" -and $_.channel -eq "stable" }).version
 
-Write-Host "Installerad version: $installedVersion"
-Write-Host "Senaste version: $latestVersion"
+Write-Host "🌍 Senaste Chrome-version: $latestVersion"
+Write-Host "☁️ Version på Azure: $azureVersion"
 
-if ($installedVersion -ne $latestVersion) {
+if ($latestVersion -ne $azureVersion) {
     Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
 
     # Ladda ner Chrome-installationsfilen
@@ -24,7 +33,7 @@ if ($installedVersion -ne $latestVersion) {
     # Skapa en CAB-fil från installationsfilen
     makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
 
-    # Byt namn på CAB-filen till rätt format (chrome_update_<version>.cab)
+    # Byt namn på CAB-filen till rätt format
     $newCabName = "chrome_update_$latestVersion.cab"
     Rename-Item -Path $localCabPath -NewName $newCabName
 
@@ -34,5 +43,5 @@ if ($installedVersion -ne $latestVersion) {
     Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
     Write-Host "✅ Sparade senaste versionen i $versionFilePath"
 } else {
-    Write-Host "✅ Chrome är redan uppdaterad. Ingen åtgärd krävs."
+    Write-Host "✅ Chrome på Azure är redan den senaste versionen. Ingen uppdatering krävs."
 }
