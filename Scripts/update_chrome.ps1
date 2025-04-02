@@ -51,8 +51,8 @@ az storage blob upload `
   --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
   --account-key $env:AZURE_STORAGE_KEY `
   --file "$newCabName" `
-  --name "$newCabName" `  # ✅ Corrected name
-  --overwrite
+  --name "$newCabName" `
+  --overwrite  # ✅ Fixed placement!
 
 Write-Host "✅ Upload completed!"
 
@@ -60,7 +60,7 @@ Write-Host "✅ Upload completed!"
 Write-Host "🔍 Verifying the uploaded file..."
 az storage blob show `
   --container-name "$env:AZURE_STORAGE_CONTAINER_NAME" `
-  --name "$newCabName" `  # ✅ Checking the correct file
+  --name "$newCabName" `
   --account-name "$env:AZURE_STORAGE_ACCOUNT_NAME" `
   --account-key "$env:AZURE_STORAGE_KEY"
 
