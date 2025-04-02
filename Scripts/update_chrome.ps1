@@ -12,17 +12,21 @@ $chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestand
 $localChromePath = "$PSScriptRoot\chrome_installer.msi"
 $latestVersionFile = "$PSScriptRoot\latest_chrome_version.txt"
 
-# 🚀 Step 1: Retrieve current version from GitHub
+# 🚀 Step 1: Retrieve current version from GitHub (local version file)
 Write-Host "🔄 Retrieving version from GitHub..."
 if (Test-Path $latestVersionFile) {
     $currentVersion = Get-Content $latestVersionFile
+    if (-not $currentVersion) {
+        Write-Host "⚠️ Version file is empty. Assuming first-time setup."
+        $currentVersion = "0.0.0.0"
+    }
     Write-Host "✅ Retrieved version from GitHub: $currentVersion"
 } else {
     Write-Host "⚠️ No version file found. Assuming first-time setup."
     $currentVersion = "0.0.0.0"
 }
 
-# 🚀 Step 2: Retrieve current version from Azure
+# 🚀 Step 2: Retrieve current version from Azure Storage
 Write-Host "🔄 Retrieving version from Azure..."
 $blobList = az storage blob list `
     --container-name $AzureContainer `
@@ -40,12 +44,12 @@ if ($existingCab) {
 }
 
 # 🚀 Step 3: Download the latest Chrome MSI
-Write-Host "🔄 Downloading Chrome..."
+Write-Host "🔄 Downloading Chrome MSI..."
 Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
 
-# 🚀 Step 4: Extract Chrome version from MSI (FAST METHOD)
+# 🚀 Step 4: Extract Chrome version from MSI
 Write-Host "🔄 Extracting Chrome version from MSI file..."
-$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.FileVersion
+$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.ProductVersion
 
 if (-not $msiVersion) {
     Write-Error "❌ ERROR: Could not extract version from MSI!"
@@ -65,6 +69,7 @@ $cabFileName = "chrome_update_$msiVersion.cab"
 $localCabPath = "$PSScriptRoot\$cabFileName"
 
 # 🚀 Step 6: Create CAB file
+Write-Host "📦 Creating CAB file..."
 MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
 
 # 🚀 Step 7: Verify CAB file exists
@@ -87,10 +92,16 @@ az storage blob upload `
 
 Write-Host "✅ CAB file uploaded successfully."
 
-# 🚀 Step 9: Update version file
+# 🚀 Step 9: Update version file in GitHub
 Write-Host "📂 Updating version file in GitHub..."
 $msiVersion | Out-File -FilePath $latestVersionFile -Encoding utf8
 
-Write-Host "✅ Version file updated."
+# 🚀 Step 10: Commit and push version file
+Write-Host "📂 Committing and pushing version file..."
+git add $latestVersionFile
+git commit -m "🔄 Updated latest Chrome version to $msiVersion"
+git push
+
+Write-Host "✅ Version file updated in GitHub."
 
 exit 0
