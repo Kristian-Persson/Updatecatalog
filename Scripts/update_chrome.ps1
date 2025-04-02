@@ -1,79 +1,51 @@
 # update_chrome.ps1
-# Uppdaterar Google Chrome om det finns en nyare version och laddar upp den till Azure
+# Uppdaterar Google Chrome, laddar upp till Azure och uppdaterar latest_chrome_version.txt i GitHub
 
 $chromeDownloadURL = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "chrome_update.msi"
-$localCabPath = "chrome_update.cab"
-$xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
+$versionFilePath = "latest_chrome_version.txt"
 
-# ✅ Hämta nuvarande version från updatescatalog.xml i GitHub
-Write-Host "🔄 Hämtar nuvarande version från updatescatalog.xml..."
-if (Test-Path -Path $xmlFilePath) {
-    [xml]$xmlContent = Get-Content $xmlFilePath
-    $azureVersion = $xmlContent.Updates.Update.Version
+# 📌 Hämta nuvarande version från latest_chrome_version.txt
+if (Test-Path -Path $versionFilePath) {
+    $azureVersion = Get-Content $versionFilePath
+    Write-Host "🔄 Hämtad version från GitHub: $azureVersion"
 } else {
-    Write-Host "⚠️ updatescatalog.xml hittades inte! Antas vara första gången."
+    Write-Host "⚠️ latest_chrome_version.txt hittades inte! Antas vara första gången."
     $azureVersion = "0.0.0.0"
 }
 
-Write-Host "☁️ Version på Azure: $azureVersion"
+Write-Host "☁️ Version på Azure enligt latest_chrome_version.txt: $azureVersion"
 
-# ✅ Hämta senaste Chrome-version från Google
-Write-Host "🔄 Hämtar senaste Chrome-version från Google..."
-$latestVersion = (Invoke-WebRequest -Uri "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest" | ConvertFrom-Json).version
+# ✅ Hämta senaste Chrome-version från MSI-filens metadata
+Write-Host "🔄 Hämtar senaste Chrome-version genom att ladda ner MSI-filen..."
+Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
 
-if (-not $latestVersion) {
-    Write-Error "❌ ERROR: Kunde inte hämta senaste Chrome-versionen!"
-    exit 1
-}
-
+# ✅ Extrahera versionen från MSI-filen
+$latestVersion = (Get-Item $localChromePath).VersionInfo.FileVersion
 Write-Host "🌍 Senaste Chrome-version: $latestVersion"
 
 # ✅ Jämför versionerna
 if ($latestVersion -eq $azureVersion) {
-    Write-Host "✅ Chrome är redan uppdaterad på Azure. Ingen åtgärd krävs."
+    Write-Host "✅ Chrome är redan uppdaterad på Azure enligt latest_chrome_version.txt. Ingen åtgärd krävs."
     exit 0
 }
 
-Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
+Write-Host "🚀 Ny version hittad! Skapar CAB-fil..."
 
-# ✅ Ladda ner Chrome MSI-filen
-Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
-
-# ✅ Kontrollera att nedladdningen lyckades
-if (-Not (Test-Path -Path $localChromePath)) {
-    Write-Error "❌ ERROR: Chrome MSI-filen kunde inte laddas ner!"
-    exit 1
-}
-
-# ✅ Skapa en CAB-fil från installationsfilen
-makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
-
-# ✅ Döp om CAB-filen till chrome_update_<version>.cab
+# ✅ Skapa en CAB-fil
 $newCabName = "chrome_update_$latestVersion.cab"
-Rename-Item -Path $localCabPath -NewName $newCabName
+makecab.exe /D CompressionType=LZX $localChromePath $newCabName
 
-# ✅ Kontrollera att CAB-filen skapades
+# ✅ Kontrollera att CAB-filen skapades korrekt
 if (-Not (Test-Path -Path $newCabName)) {
     Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
     exit 1
 }
 
-Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
-Write-Host "☁️ Laddar upp CAB-filen till Azure..."
+Write-Host "✅ CAB-fil skapad: $newCabName"
 
-# ✅ Kontrollera att Azure credentials finns
-$missingSecrets = @()
-if (-not $env:AZURE_STORAGE_ACCOUNT_NAME) { $missingSecrets += "AZURE_STORAGE_ACCOUNT_NAME" }
-if (-not $env:AZURE_STORAGE_CONTAINER_NAME) { $missingSecrets += "AZURE_STORAGE_CONTAINER_NAME" }
-if (-not $env:AZURE_STORAGE_KEY) { $missingSecrets += "AZURE_STORAGE_KEY" }
-
-if ($missingSecrets.Count -gt 0) {
-    Write-Error "❌ ERROR: Saknade Azure-credentials! Följande secrets saknas: $($missingSecrets -join ', ')"
-    exit 1
-}
-
-# ✅ Ladda upp CAB-filen till Azure
+# ✅ Ladda upp till Azure
+Write-Host "☁️ Laddar upp filen till Azure Storage..."
 az storage blob upload `
   --container-name $env:AZURE_STORAGE_CONTAINER_NAME `
   --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
@@ -85,7 +57,14 @@ az storage blob upload `
 Write-Host "✅ Uppladdning slutförd!"
 
 # ✅ Uppdatera latest_chrome_version.txt
-Set-Content -Path "latest_chrome_version.txt" -Value $latestVersion
-Write-Host "✅ Sparade senaste versionen i latest_chrome_version.txt"
+Write-Host "📄 Uppdaterar latest_chrome_version.txt..."
+$latestVersion | Set-Content $versionFilePath
 
+# ✅ Commit & push till GitHub
+Write-Host "🔄 Laddar upp latest_chrome_version.txt till GitHub..."
+git add $versionFilePath
+git commit -m "🔄 Uppdaterade Chrome-versionen till $latestVersion i latest_chrome_version.txt" || Write-Host "Inga ändringar att committa"
+git push
+
+Write-Host "✅ Klart!"
 exit 0
