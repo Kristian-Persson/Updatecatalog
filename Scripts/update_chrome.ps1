@@ -1,52 +1,51 @@
 # update_chrome.ps1
-# Updates Google Chrome if a new version is available and uploads it to Azure.
+# Script to download the latest Chrome MSI, create a CAB file, and upload to Azure Storage.
 
-# 📌 Configuration
-$chromeDownloadURL = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-$localChromePath = "chrome_update.msi"
-$latestVersionFile = "latest_chrome_version.txt"
+param (
+    [string]$AzureStorageAccount = $env:AZURE_STORAGE_ACCOUNT_NAME,
+    [string]$AzureContainer = $env:AZURE_STORAGE_CONTAINER_NAME,
+    [string]$AzureStorageKey = $env:AZURE_STORAGE_KEY
+)
 
-# 🔄 Step 1: Retrieve version from GitHub (.txt file)
+# 🚀 Variables
+$chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+$localChromePath = "$PSScriptRoot\chrome_installer.msi"
+$latestVersionFile = "$PSScriptRoot\latest_chrome_version.txt"
+
+# 🚀 Step 1: Retrieve current version from GitHub
 Write-Host "🔄 Retrieving version from GitHub..."
-if (Test-Path -Path $latestVersionFile) {
-    $githubVersion = Get-Content $latestVersionFile
-    Write-Host "✅ Retrieved version from GitHub: $githubVersion"
+if (Test-Path $latestVersionFile) {
+    $currentVersion = Get-Content $latestVersionFile
+    Write-Host "✅ Retrieved version from GitHub: $currentVersion"
 } else {
-    Write-Host "⚠️ No version file found! Assuming first-time setup."
-    $githubVersion = "0.0.0.0"
+    Write-Host "⚠️ No version file found. Assuming first-time setup."
+    $currentVersion = "0.0.0.0"
 }
 
-# 🔄 Step 2: Check if a CAB file exists in Azure
-Write-Host "🔄 Checking for existing CAB file on Azure..."
-$azureVersion = "0.0.0.0"
+# 🚀 Step 2: Retrieve current version from Azure
+Write-Host "🔄 Retrieving version from Azure..."
+$blobList = az storage blob list `
+    --container-name $AzureContainer `
+    --account-name $AzureStorageAccount `
+    --account-key $AzureStorageKey `
+    --output json | ConvertFrom-Json
 
-$azureBlobList = az storage blob list `
-    --container-name $env:AZURE_STORAGE_CONTAINER_NAME `
-    --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
-    --account-key $env:AZURE_STORAGE_KEY `
-    --query "[].name" -o tsv 2>$null
-
-foreach ($blob in $azureBlobList) {
-    if ($blob -match "chrome_update_(\d+\.\d+\.\d+\.\d+)\.cab") {
-        $azureVersion = $matches[1]
-        Write-Host "✅ Found version on Azure: $azureVersion"
-        break
-    }
+$existingCab = $blobList | Where-Object { $_.name -match "chrome_update_(\d+\.\d+\.\d+\.\d+)\.cab" }
+if ($existingCab) {
+    $azureVersion = [regex]::Match($existingCab.name, "chrome_update_(\d+\.\d+\.\d+\.\d+).cab").Groups[1].Value
+    Write-Host "✅ Version found on Azure: $azureVersion"
+} else {
+    Write-Host "⚠️ Could not retrieve version from Azure. Assuming first-time upload."
+    $azureVersion = "0.0.0.0"
 }
 
-if ($azureVersion -eq "0.0.0.0") {
-    Write-Host "⚠️ No CAB file found on Azure. Assuming first-time upload."
-}
+# 🚀 Step 3: Download the latest Chrome MSI
+Write-Host "🔄 Downloading Chrome..."
+Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
 
-Write-Host "☁️ Version on Azure: $azureVersion"
-
-# 🔄 Step 3: Download the latest Chrome MSI
-Write-Host "🔄 Downloading Chrome MSI..."
-Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
-
-# 🔍 Step 4: Extract Chrome version from MSI
-Write-Host "🔄 Extracting Chrome version from MSI..."
-$msiVersion = (Get-WmiObject Win32_Product | Where-Object { $_.Name -like "Google Chrome*" }).Version
+# 🚀 Step 4: Extract Chrome version from MSI (FAST METHOD)
+Write-Host "🔄 Extracting Chrome version from MSI file..."
+$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.FileVersion
 
 if (-not $msiVersion) {
     Write-Error "❌ ERROR: Could not extract version from MSI!"
@@ -55,47 +54,43 @@ if (-not $msiVersion) {
 
 Write-Host "🌍 Latest Chrome version: $msiVersion"
 
-# ✅ Step 5: Compare versions (only update if newer)
-if ($msiVersion -le $githubVersion -and $msiVersion -le $azureVersion) {
+# 🚀 Step 5: Compare versions and decide if update is needed
+if ($msiVersion -le $azureVersion) {
     Write-Host "✅ Chrome is already updated on Azure. No action needed."
     exit 0
-} else {
-    Write-Host "🚀 New version detected! Updating..."
 }
 
-# 🗜 Step 6: Create CAB file
+Write-Host "🚀 New version found! Creating CAB file..."
 $cabFileName = "chrome_update_$msiVersion.cab"
-Write-Host "🔄 Creating CAB file: $cabFileName..."
-makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $cabFileName
+$localCabPath = "$PSScriptRoot\$cabFileName"
 
-# ✅ Verify CAB file
-if (-Not (Test-Path -Path $cabFileName)) {
-    Write-Error "❌ ERROR: CAB file creation failed!"
+# 🚀 Step 6: Create CAB file
+MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
+
+# 🚀 Step 7: Verify CAB file exists
+if (-not (Test-Path $localCabPath)) {
+    Write-Error "❌ ERROR: CAB file was NOT created correctly!"
     exit 1
 }
 
-Write-Host "✅ CAB file created successfully: $cabFileName"
+Write-Host "✅ CAB file created: $cabFileName"
 
-# 💾 Step 7: Save latest version to file
-Write-Host "💾 Saving latest version to $latestVersionFile..."
-$msiVersion | Out-File -Encoding utf8 $latestVersionFile
-
-# ☁️ Step 8: Upload CAB file to Azure
-Write-Host "☁️ Uploading $cabFileName to Azure Storage..."
+# 🚀 Step 8: Upload CAB file to Azure Storage
+Write-Host "☁️ Uploading CAB file to Azure..."
 az storage blob upload `
-    --container-name $env:AZURE_STORAGE_CONTAINER_NAME `
-    --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
-    --account-key $env:AZURE_STORAGE_KEY `
-    --file $cabFileName `
+    --container-name $AzureContainer `
+    --account-name $AzureStorageAccount `
+    --account-key $AzureStorageKey `
+    --file $localCabPath `
     --name $cabFileName `
     --overwrite
 
 Write-Host "✅ CAB file uploaded successfully."
 
-# 🔄 Step 9: Commit latest version file to GitHub
-Write-Host "🔄 Committing latest version file to GitHub..."
-git add $latestVersionFile
-git commit -m "🔄 Auto-update: Chrome $msiVersion"
-git push
+# 🚀 Step 9: Update version file
+Write-Host "📂 Updating version file in GitHub..."
+$msiVersion | Out-File -FilePath $latestVersionFile -Encoding utf8
 
-Write-Host "🎉 Chrome update process completed successfully!"
+Write-Host "✅ Version file updated."
+
+exit 0
