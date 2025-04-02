@@ -1,8 +1,8 @@
 # update_chrome.ps1
 # Uppdaterar Google Chrome om det finns en ny version
 
-$chromeDownloadURL = "https://dl.google.com/update2/installers/ChromeSetup.exe"
-$localChromePath = "chrome_update.exe"
+$chromeDownloadURL = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+$localChromePath = "chrome_update.msi"
 $versionFilePath = "latest_chrome_version.txt"
 $xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
 $githubRawURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/$xmlFilePath"
@@ -43,7 +43,7 @@ Write-Host "📄 Version i XML-filen (GitHub): $githubVersion"
 if ($latestVersion -ne $githubVersion) {
     Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
 
-    # 🛠 Ladda ner Chrome-installationsfilen
+    # 🛠 Ladda ner Chrome-installationsfilen (MSI)
     Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
 
     # ✅ Kontrollera att filen laddades ner korrekt
@@ -55,7 +55,9 @@ if ($latestVersion -ne $githubVersion) {
     # 🛠 Skapa en CAB-fil från installationsfilen
     Write-Host "📦 Skapar CAB-fil..."
     $cabFileName = "chrome_update_$latestVersion.cab"
-    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $cabFileName
+    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 `
+                /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 `
+                $localChromePath $cabFileName
 
     # ✅ Kontrollera att CAB-filen skapades
     if (-Not (Test-Path -Path $cabFileName)) {
