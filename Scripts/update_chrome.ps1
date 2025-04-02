@@ -1,70 +1,78 @@
 # update_chrome.ps1
-# Uppdaterar Google Chrome, laddar upp till Azure och uppdaterar latest_chrome_version.txt i GitHub
+# Updates Chrome, uploads to Azure, and updates latest_chrome_version.txt in GitHub
 
 $chromeDownloadURL = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "chrome_update.msi"
 $versionFilePath = "latest_chrome_version.txt"
 
-# 📌 Hämta nuvarande version från latest_chrome_version.txt
+# 📌 Get current version from latest_chrome_version.txt
 if (Test-Path -Path $versionFilePath) {
     $azureVersion = Get-Content $versionFilePath
-    Write-Host "🔄 Hämtad version från GitHub: $azureVersion"
+    Write-Host "🔄 Retrieved version from GitHub: $azureVersion"
 } else {
-    Write-Host "⚠️ latest_chrome_version.txt hittades inte! Antas vara första gången."
+    Write-Host "⚠️ latest_chrome_version.txt not found! Assuming first run."
     $azureVersion = "0.0.0.0"
 }
 
-Write-Host "☁️ Version på Azure enligt latest_chrome_version.txt: $azureVersion"
+Write-Host "☁️ Version on Azure: $azureVersion"
 
-# ✅ Hämta senaste Chrome-version från MSI-filens metadata
-Write-Host "🔄 Hämtar senaste Chrome-version genom att ladda ner MSI-filen..."
+# ✅ Download the latest Chrome MSI
+Write-Host "🔄 Downloading latest Chrome MSI..."
 Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
 
-# ✅ Extrahera versionen från MSI-filen
+# ✅ Extract version from MSI file
 $latestVersion = (Get-Item $localChromePath).VersionInfo.FileVersion
-Write-Host "🌍 Senaste Chrome-version: $latestVersion"
+Write-Host "🌍 Latest Chrome version: $latestVersion"
 
-# ✅ Jämför versionerna
+# ✅ Compare versions
 if ($latestVersion -eq $azureVersion) {
-    Write-Host "✅ Chrome är redan uppdaterad på Azure enligt latest_chrome_version.txt. Ingen åtgärd krävs."
+    Write-Host "✅ Chrome is already updated on Azure. No action needed."
     exit 0
 }
 
-Write-Host "🚀 Ny version hittad! Skapar CAB-fil..."
+Write-Host "🚀 New version found! Creating CAB file..."
 
-# ✅ Skapa en CAB-fil
+# ✅ Create a CAB file
 $newCabName = "chrome_update_$latestVersion.cab"
 makecab.exe /D CompressionType=LZX $localChromePath $newCabName
 
-# ✅ Kontrollera att CAB-filen skapades korrekt
+# ✅ Verify that the CAB file was created
 if (-Not (Test-Path -Path $newCabName)) {
-    Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
+    Write-Error "❌ ERROR: CAB file was NOT created correctly!"
     exit 1
 }
 
-Write-Host "✅ CAB-fil skapad: $newCabName"
+Write-Host "✅ CAB file created: $newCabName"
 
-# ✅ Ladda upp till Azure
-Write-Host "☁️ Laddar upp filen till Azure Storage..."
+# ✅ Upload to Azure
+Write-Host "☁️ Uploading file to Azure Storage..."
 az storage blob upload `
   --container-name $env:AZURE_STORAGE_CONTAINER_NAME `
   --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
   --account-key $env:AZURE_STORAGE_KEY `
   --file "$newCabName" `
-  --name "$newCabName" `
+  --name "$newCabName" `  # ✅ Corrected name
   --overwrite
 
-Write-Host "✅ Uppladdning slutförd!"
+Write-Host "✅ Upload completed!"
 
-# ✅ Uppdatera latest_chrome_version.txt
-Write-Host "📄 Uppdaterar latest_chrome_version.txt..."
+# ✅ Verify the upload
+Write-Host "🔍 Verifying the uploaded file..."
+az storage blob show `
+  --container-name "$env:AZURE_STORAGE_CONTAINER_NAME" `
+  --name "$newCabName" `  # ✅ Checking the correct file
+  --account-name "$env:AZURE_STORAGE_ACCOUNT_NAME" `
+  --account-key "$env:AZURE_STORAGE_KEY"
+
+# ✅ Update latest_chrome_version.txt
+Write-Host "📄 Updating latest_chrome_version.txt..."
 $latestVersion | Set-Content $versionFilePath
 
-# ✅ Commit & push till GitHub
-Write-Host "🔄 Laddar upp latest_chrome_version.txt till GitHub..."
+# ✅ Commit & push to GitHub
+Write-Host "🔄 Pushing latest_chrome_version.txt to GitHub..."
 git add $versionFilePath
-git commit -m "🔄 Uppdaterade Chrome-versionen till $latestVersion i latest_chrome_version.txt" || Write-Host "Inga ändringar att committa"
+git commit -m "🔄 Updated Chrome version to $latestVersion in latest_chrome_version.txt" || Write-Host "No changes to commit"
 git push
 
-Write-Host "✅ Klart!"
+Write-Host "✅ Done!"
 exit 0
