@@ -33,31 +33,31 @@ if (-not $azureVersion) {
 
 Write-Host "☁️ Version on Azure: $azureVersion"
 
-# 🔄 Retrieve the latest Chrome version
-Write-Host "🔄 Checking the latest available Chrome version..."
-$latestVersion = (Invoke-WebRequest -Uri "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest" -UseBasicParsing | ConvertFrom-Json).version
+# ⬇️ Download Chrome MSI
+Write-Host "🔄 Downloading Chrome..."
+Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
 
-if (-not $latestVersion) {
-    Write-Error "❌ ERROR: Could not fetch latest Chrome version!"
+# 🔍 Extract Chrome version from MSI
+Write-Host "🔄 Extracting Chrome version from MSI..."
+$msiVersion = (Get-Item $localChromePath).VersionInfo.FileVersion
+
+if (-not $msiVersion) {
+    Write-Error "❌ ERROR: Could not extract version from MSI!"
     exit 1
 }
 
-Write-Host "🌍 Latest Chrome version: $latestVersion"
+Write-Host "🌍 Latest Chrome version: $msiVersion"
 
 # ✅ Compare versions
-if ($latestVersion -eq $azureVersion) {
+if ($msiVersion -eq $azureVersion) {
     Write-Host "✅ Chrome is already updated on Azure. No action needed."
     exit 0
 } else {
-    Write-Host "🚀 New version detected! Downloading and packaging Chrome..."
+    Write-Host "🚀 New version detected! Creating CAB package..."
 }
 
-# ⬇️ Download Chrome MSI
-Write-Host "🔄 Downloading Chrome $latestVersion..."
-Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
-
 # 🗜 Create CAB file
-$cabFileName = "chrome_update_$latestVersion.cab"
+$cabFileName = "chrome_update_$msiVersion.cab"
 Write-Host "🔄 Creating CAB file: $cabFileName..."
 makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $cabFileName
 
@@ -69,9 +69,9 @@ if (-Not (Test-Path -Path $cabFileName)) {
 
 Write-Host "✅ CAB file created successfully: $cabFileName"
 
-# 📂 Save latest version to file
+# 💾 Save latest version to file
 Write-Host "💾 Saving latest version to $latestVersionFile..."
-$latestVersion | Out-File -Encoding utf8 $latestVersionFile
+$msiVersion | Out-File -Encoding utf8 $latestVersionFile
 
 # ☁️ Upload CAB file to Azure
 Write-Host "☁️ Uploading $cabFileName to Azure Storage..."
@@ -85,10 +85,10 @@ az storage blob upload `
 
 Write-Host "✅ CAB file uploaded successfully."
 
-# ✅ Update GitHub version file
+# 🔄 Commit latest version file to GitHub
 Write-Host "🔄 Committing latest version file to GitHub..."
 git add $latestVersionFile
-git commit -m "🔄 Auto-update: Chrome $latestVersion"
+git commit -m "🔄 Auto-update: Chrome $msiVersion"
 git push
 
 Write-Host "🎉 Chrome update process completed successfully!"
