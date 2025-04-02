@@ -1,75 +1,91 @@
 # update_chrome.ps1
-# Uppdaterar Google Chrome om det finns en ny version
+# Uppdaterar Google Chrome om det finns en nyare version och laddar upp den till Azure
 
 $chromeDownloadURL = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "chrome_update.msi"
-$versionFilePath = "latest_chrome_version.txt"
+$localCabPath = "chrome_update.cab"
 $xmlFilePath = "UpdatesCatalog/updatescatalog.xml"
-$githubRawURL = "https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/$xmlFilePath"
 
-# 🛠 Funktion för att hämta version från XML-filen i GitHub
-function Get-ChromeVersionFromXML {
-    param ($xmlUrl)
-    
-    try {
-        Write-Host "🔄 Hämtar nuvarande version från XML-filen i GitHub..."
-        $xmlContent = [xml](Invoke-WebRequest -Uri $xmlUrl -UseBasicParsing).Content
-        $chromeVersion = $xmlContent.catalog.package | Where-Object { $_.name -match "chrome_update_" } | Select-Object -ExpandProperty version
-
-        if ($chromeVersion) {
-            return $chromeVersion
-        } else {
-            Write-Host "⚠️ Ingen Chrome-version hittades i XML-filen."
-            return "0.0.0.0"
-        }
-    } catch {
-        Write-Host "⚠️ Kunde inte hämta XML-filen från GitHub. Antar att det är första gången."
-        return "0.0.0.0"
-    }
+# ✅ Hämta nuvarande version från updatescatalog.xml i GitHub
+Write-Host "🔄 Hämtar nuvarande version från updatescatalog.xml..."
+if (Test-Path -Path $xmlFilePath) {
+    [xml]$xmlContent = Get-Content $xmlFilePath
+    $azureVersion = $xmlContent.Updates.Update.Version
+} else {
+    Write-Host "⚠️ updatescatalog.xml hittades inte! Antas vara första gången."
+    $azureVersion = "0.0.0.0"
 }
 
-# 🛠 Hämta nuvarande version från XML-filen (GitHub)
-$githubVersion = Get-ChromeVersionFromXML -xmlUrl $githubRawURL
+Write-Host "☁️ Version på Azure: $azureVersion"
 
-# 🔍 Hämta senaste Chrome-version från Google
+# ✅ Hämta senaste Chrome-version från Google
 Write-Host "🔄 Hämtar senaste Chrome-version från Google..."
-$chromeData = Invoke-RestMethod -Uri "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" -UseBasicParsing
-$latestVersion = $chromeData.channels.Stable.version
+$latestVersion = (Invoke-WebRequest -Uri "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest" | ConvertFrom-Json).version
+
+if (-not $latestVersion) {
+    Write-Error "❌ ERROR: Kunde inte hämta senaste Chrome-versionen!"
+    exit 1
+}
 
 Write-Host "🌍 Senaste Chrome-version: $latestVersion"
-Write-Host "📄 Version i XML-filen (GitHub): $githubVersion"
 
-# 🔄 Jämför versionerna
-if ($latestVersion -ne $githubVersion) {
-    Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
-
-    # 🛠 Ladda ner Chrome-installationsfilen (MSI)
-    Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
-
-    # ✅ Kontrollera att filen laddades ner korrekt
-    if (-Not (Test-Path -Path $localChromePath)) {
-        Write-Error "❌ ERROR: Chrome installationsfilen laddades INTE ner korrekt!"
-        exit 1
-    }
-
-    # 🛠 Skapa en CAB-fil från installationsfilen
-    Write-Host "📦 Skapar CAB-fil..."
-    $cabFileName = "chrome_update_$latestVersion.cab"
-    makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 `
-                /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 `
-                $localChromePath $cabFileName
-
-    # ✅ Kontrollera att CAB-filen skapades
-    if (-Not (Test-Path -Path $cabFileName)) {
-        Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
-        exit 1
-    }
-
-    # 🛠 Spara den senaste versionen i en fil
-    Set-Content -Path $versionFilePath -Value $latestVersion
-
-    Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $cabFileName"
-    Write-Host "✅ Sparade senaste versionen i $versionFilePath"
-} else {
-    Write-Host "✅ Chrome i GitHub är redan den senaste versionen. Ingen uppdatering krävs."
+# ✅ Jämför versionerna
+if ($latestVersion -eq $azureVersion) {
+    Write-Host "✅ Chrome är redan uppdaterad på Azure. Ingen åtgärd krävs."
+    exit 0
 }
+
+Write-Host "🚀 Ny version hittad! Laddar ner Chrome $latestVersion..."
+
+# ✅ Ladda ner Chrome MSI-filen
+Invoke-WebRequest -Uri $chromeDownloadURL -OutFile $localChromePath
+
+# ✅ Kontrollera att nedladdningen lyckades
+if (-Not (Test-Path -Path $localChromePath)) {
+    Write-Error "❌ ERROR: Chrome MSI-filen kunde inte laddas ner!"
+    exit 1
+}
+
+# ✅ Skapa en CAB-fil från installationsfilen
+makecab.exe /D CompressionType=LZX /D CompressionMemory=21 /D Cabinet=ON /D MaxDiskSize=0 /D ReservePerCabinetSize=8 /D ReservePerFolderSize=8 /D ReservePerDataBlockSize=8 $localChromePath $localCabPath
+
+# ✅ Döp om CAB-filen till chrome_update_<version>.cab
+$newCabName = "chrome_update_$latestVersion.cab"
+Rename-Item -Path $localCabPath -NewName $newCabName
+
+# ✅ Kontrollera att CAB-filen skapades
+if (-Not (Test-Path -Path $newCabName)) {
+    Write-Error "❌ ERROR: CAB-filen skapades INTE korrekt!"
+    exit 1
+}
+
+Write-Host "✅ Chrome $latestVersion CAB-fil skapad: $newCabName"
+Write-Host "☁️ Laddar upp CAB-filen till Azure..."
+
+# ✅ Kontrollera att Azure credentials finns
+$missingSecrets = @()
+if (-not $env:AZURE_STORAGE_ACCOUNT_NAME) { $missingSecrets += "AZURE_STORAGE_ACCOUNT_NAME" }
+if (-not $env:AZURE_STORAGE_CONTAINER_NAME) { $missingSecrets += "AZURE_STORAGE_CONTAINER_NAME" }
+if (-not $env:AZURE_STORAGE_KEY) { $missingSecrets += "AZURE_STORAGE_KEY" }
+
+if ($missingSecrets.Count -gt 0) {
+    Write-Error "❌ ERROR: Saknade Azure-credentials! Följande secrets saknas: $($missingSecrets -join ', ')"
+    exit 1
+}
+
+# ✅ Ladda upp CAB-filen till Azure
+az storage blob upload `
+  --container-name $env:AZURE_STORAGE_CONTAINER_NAME `
+  --account-name $env:AZURE_STORAGE_ACCOUNT_NAME `
+  --account-key $env:AZURE_STORAGE_KEY `
+  --file "$newCabName" `
+  --name "$newCabName" `
+  --overwrite
+
+Write-Host "✅ Uppladdning slutförd!"
+
+# ✅ Uppdatera latest_chrome_version.txt
+Set-Content -Path "latest_chrome_version.txt" -Value $latestVersion
+Write-Host "✅ Sparade senaste versionen i latest_chrome_version.txt"
+
+exit 0
