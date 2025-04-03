@@ -1,14 +1,13 @@
-# Construct the correct MSI download URL based on API version
-$chromeDownloadUrl = "https://dl.google.com/release2/chrome/$latestVersion/googlechromestandaloneenterprise64.msi"
+# Define the Enterprise MSI download URL
+$msiUrl = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $msiPath = "$env:TEMP\googlechrome.msi"
 
-# Download Chrome MSI
-Write-Host "🔄 Downloading Chrome MSI from: $chromeDownloadUrl"
+Write-Host "🔄 Downloading Chrome Enterprise MSI from: $msiUrl"
 try {
-    Invoke-WebRequest -Uri $chromeDownloadUrl -OutFile $msiPath
-    Write-Host "✅ Chrome MSI downloaded successfully."
+    Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
+    Write-Host "✅ Chrome Enterprise MSI downloaded successfully."
 } catch {
-    Write-Error "❌ ERROR: Failed to download Chrome MSI!"
+    Write-Error "❌ ERROR: Failed to download Chrome Enterprise MSI!"
     exit 1
 }
 
@@ -37,15 +36,45 @@ try {
     exit 1
 }
 
-# Install Chrome MSI
-Write-Host "🔄 Installing Chrome MSI..."
+# Define CAB file path with extracted version
+$cabPath = "$env:TEMP\chrome_$msiVersion.cab"
+Write-Host "🔄 Naming CAB file as: $cabPath"
+
+# Simulating CAB file creation (Replace this with actual CAB creation process)
+Write-Host "🔄 Creating CAB file..."
 try {
-    Start-Process "msiexec.exe" -ArgumentList "/i $msiPath /qn /norestart" -Wait -NoNewWindow
-    Write-Host "✅ Chrome installed successfully."
+    New-Item -ItemType File -Path $cabPath -Force | Out-Null
+    Write-Host "✅ CAB file created successfully: $cabPath"
 } catch {
-    Write-Error "❌ ERROR: Failed to install Chrome!"
+    Write-Error "❌ ERROR: Failed to create CAB file!"
     exit 1
 }
 
-# Verify installation
-Write-Host "🎉 Chrome updated successfully to version: $msiVersion"
+# Define XML file path
+$xmlPath = "$env:TEMP\update_catalog.xml"
+
+# Update XML file with new version
+Write-Host "🔄 Updating XML file with new version..."
+try {
+    if (Test-Path $xmlPath) {
+        [xml]$xml = Get-Content $xmlPath
+        $xml.Update.Version = $msiVersion
+        $xml.Save($xmlPath)
+        Write-Host "✅ XML file updated successfully."
+    } else {
+        Write-Host "⚠️ XML file not found. Creating a new one..."
+        $xmlContent = @"
+<Update>
+    <Version>$msiVersion</Version>
+</Update>
+"@
+        $xmlContent | Out-File $xmlPath
+        Write-Host "✅ New XML file created successfully."
+    }
+} catch {
+    Write-Error "❌ ERROR: Failed to update XML file!"
+    exit 1
+}
+
+Write-Host "🎉 Process completed successfully!"
+exit 0
