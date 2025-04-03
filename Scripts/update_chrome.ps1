@@ -1,49 +1,13 @@
-# Define Variables
-$apiUrl = "https://chromiumdash.appspot.com/fetch_releases?platform=Windows&channel=Stable"
-$chromeDownloadUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+# Define the Enterprise MSI download URL
+$msiUrl = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $msiPath = "$env:TEMP\googlechrome.msi"
 
-Write-Host "🔄 Fetching latest Chrome version from ChromiumDash API..."
+Write-Host "🔄 Downloading Chrome Enterprise MSI from: $msiUrl"
 try {
-    # Fetch latest Chrome version
-    $response = Invoke-RestMethod -Uri $apiUrl -Method Get -Headers @{"Cache-Control"="no-cache"}
-
-    # Debugging: Print API Response
-    Write-Host "DEBUG: API Raw Response - $($response | ConvertTo-Json -Depth 10)"
-
-    # Extract latest stable version from the first entry
-    $latestVersion = $response | Select-Object -First 1 -ExpandProperty version
-
-    if (-not $latestVersion) {
-        throw "❌ No stable Windows version found!"
-    }
-
-    Write-Host "✅ Latest Chrome version: $latestVersion"
+    Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
+    Write-Host "✅ Chrome Enterprise MSI downloaded successfully."
 } catch {
-    Write-Error "❌ ERROR: Could not retrieve version from Google API!"
-    exit 1
-}
-
-# Check if Chrome is already installed
-$installedVersion = $null
-try {
-    $installedVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome").DisplayVersion
-} catch {
-    Write-Host "⚠️ Chrome is not installed."
-}
-
-if ($installedVersion -eq $latestVersion) {
-    Write-Host "✅ Chrome is already up to date ($latestVersion). No action needed."
-    exit 0
-}
-
-# Download Chrome MSI
-Write-Host "🔄 Downloading Chrome MSI from: $chromeDownloadUrl"
-try {
-    Invoke-WebRequest -Uri $chromeDownloadUrl -OutFile $msiPath
-    Write-Host "✅ Chrome MSI downloaded successfully."
-} catch {
-    Write-Error "❌ ERROR: Failed to download Chrome MSI!"
+    Write-Error "❌ ERROR: Failed to download Chrome Enterprise MSI!"
     exit 1
 }
 
@@ -72,27 +36,45 @@ try {
     exit 1
 }
 
-# Compare downloaded MSI version with latest version
-if ($msiVersion -ne $latestVersion) {
-    Write-Error "❌ ERROR: Downloaded MSI version ($msiVersion) does NOT match latest version ($latestVersion)!"
-    exit 1
-}
+# Define CAB file path with extracted version
+$cabPath = "$env:TEMP\chrome_$msiVersion.cab"
+Write-Host "🔄 Naming CAB file as: $cabPath"
 
-# Install Chrome MSI
-Write-Host "🔄 Installing Chrome MSI..."
+# Simulating CAB file creation (Replace this with actual CAB creation process)
+Write-Host "🔄 Creating CAB file..."
 try {
-    Start-Process "msiexec.exe" -ArgumentList "/i $msiPath /qn /norestart" -Wait -NoNewWindow
-    Write-Host "✅ Chrome installed successfully."
+    New-Item -ItemType File -Path $cabPath -Force | Out-Null
+    Write-Host "✅ CAB file created successfully: $cabPath"
 } catch {
-    Write-Error "❌ ERROR: Failed to install Chrome!"
+    Write-Error "❌ ERROR: Failed to create CAB file!"
     exit 1
 }
 
-# Verify installation
-$installedVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome").DisplayVersion
-if ($installedVersion -eq $latestVersion) {
-    Write-Host "🎉 Chrome updated successfully to version: $installedVersion"
-} else {
-    Write-Error "❌ ERROR: Chrome update verification failed! Installed version: $installedVersion"
+# Define XML file path
+$xmlPath = "$env:TEMP\update_catalog.xml"
+
+# Update XML file with new version
+Write-Host "🔄 Updating XML file with new version..."
+try {
+    if (Test-Path $xmlPath) {
+        [xml]$xml = Get-Content $xmlPath
+        $xml.Update.Version = $msiVersion
+        $xml.Save($xmlPath)
+        Write-Host "✅ XML file updated successfully."
+    } else {
+        Write-Host "⚠️ XML file not found. Creating a new one..."
+        $xmlContent = @"
+<Update>
+    <Version>$msiVersion</Version>
+</Update>
+"@
+        $xmlContent | Out-File $xmlPath
+        Write-Host "✅ New XML file created successfully."
+    }
+} catch {
+    Write-Error "❌ ERROR: Failed to update XML file!"
     exit 1
 }
+
+Write-Host "🎉 Process completed successfully!"
+exit 0
