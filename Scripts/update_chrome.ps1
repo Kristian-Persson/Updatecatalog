@@ -32,9 +32,24 @@ if ($existingCab) {
 Write-Host "🔄 Downloading Chrome MSI..."
 Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
 
-# 🚀 Step 3: Extract Chrome version from MSI (RESTORED WORKING METHOD)
+# 🚀 Step 3: Extract Chrome version from MSI
 Write-Host "🔄 Extracting Chrome version from MSI file..."
-$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.FileVersion
+
+# Get MSI properties
+$msiItem = Get-Item -Path $localChromePath
+$msiInfo = $msiItem.VersionInfo
+
+# Try extracting version from different fields
+$msiVersion = $msiInfo.FileVersion
+if (-not $msiVersion) {
+    Write-Host "⚠️ Debug: FileVersion is EMPTY. Trying ProductVersion..."
+    $msiVersion = $msiInfo.ProductVersion
+}
+
+if (-not $msiVersion) {
+    Write-Host "⚠️ Debug: ProductVersion is also EMPTY. Trying 'Comments' field..."
+    $msiVersion = ($msiInfo.Comments -match "(\d+\.\d+\.\d+\.\d+)") ? $matches[1] : $null
+}
 
 if (-not $msiVersion) {
     Write-Error "❌ ERROR: Could not extract version from MSI!"
@@ -54,6 +69,7 @@ $cabFileName = "chrome_update_$msiVersion.cab"
 $localCabPath = "$PSScriptRoot\$cabFileName"
 
 # 🚀 Step 5: Create CAB file
+Write-Host "🔄 Creating CAB file..."
 MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
 
 # 🚀 Step 6: Verify CAB file exists
