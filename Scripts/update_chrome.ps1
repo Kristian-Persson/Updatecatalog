@@ -1,5 +1,5 @@
 # update_chrome.ps1
-# Script to download the latest Chrome MSI, create a CAB file, and upload to Azure Storage.
+# Script to download the latest Chrome MSI, extract version, create a CAB file, and upload to Azure Storage.
 
 param (
     [string]$AzureStorageAccount = $env:AZURE_STORAGE_ACCOUNT_NAME,
@@ -35,22 +35,44 @@ Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
 # 🚀 Step 3: Extract Chrome version from MSI
 Write-Host "🔄 Extracting Chrome version from MSI file..."
 
-# Get MSI properties
+# 🛠 Try multiple ways to extract version
+$msiVersion = $null
+
+# Method 1: Use Get-ItemProperty
 $msiItem = Get-Item -Path $localChromePath
 $msiInfo = $msiItem.VersionInfo
 
-# Try extracting version from different fields
-$msiVersion = $msiInfo.FileVersion
-if (-not $msiVersion) {
-    Write-Host "⚠️ Debug: FileVersion is EMPTY. Trying ProductVersion..."
+if ($msiInfo.FileVersion) {
+    $msiVersion = $msiInfo.FileVersion
+    Write-Host "✅ Extracted FileVersion: $msiVersion"
+} elseif ($msiInfo.ProductVersion) {
     $msiVersion = $msiInfo.ProductVersion
+    Write-Host "✅ Extracted ProductVersion: $msiVersion"
+} else {
+    Write-Host "⚠️ FileVersion & ProductVersion are empty. Trying 'Comments' field..."
 }
 
+# Method 2: Extract from Comments metadata using Shell.Application
 if (-not $msiVersion) {
-    Write-Host "⚠️ Debug: ProductVersion is also EMPTY. Trying 'Comments' field..."
-    $msiVersion = ($msiInfo.Comments -match "(\d+\.\d+\.\d+\.\d+)") ? $matches[1] : $null
+    try {
+        $shell = New-Object -ComObject Shell.Application
+        $folder = $shell.Namespace((Get-Item $localChromePath).DirectoryName)
+        $file = $folder.ParseName((Get-Item $localChromePath).Name)
+        
+        for ($i = 0; $i -lt 300; $i++) {
+            $property = $folder.GetDetailsOf($file, $i)
+            if ($property -match "(\d+\.\d+\.\d+\.\d+)") {
+                $msiVersion = $matches[1]
+                Write-Host "✅ Extracted version from Comments field: $msiVersion"
+                break
+            }
+        }
+    } catch {
+        Write-Host "⚠️ Failed to extract version from Comments field."
+    }
 }
 
+# Final check
 if (-not $msiVersion) {
     Write-Error "❌ ERROR: Could not extract version from MSI!"
     exit 1
