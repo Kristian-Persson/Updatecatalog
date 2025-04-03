@@ -1,93 +1,98 @@
-# update_chrome.ps1
-# Script to fetch the latest Chrome version from ChromiumDash API, download MSI, create CAB, and upload to Azure.
+# Define Variables
+$apiUrl = "https://chromiumdash.appspot.com/fetch_releases?platform=Windows&channel=Stable"
+$chromeDownloadUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
+$msiPath = "$env:TEMP\googlechrome.msi"
 
-param (
-    [string]$AzureStorageAccount = $env:AZURE_STORAGE_ACCOUNT_NAME,
-    [string]$AzureContainer = $env:AZURE_STORAGE_CONTAINER_NAME,
-    [string]$AzureStorageKey = $env:AZURE_STORAGE_KEY
-)
-
-# 🚀 Variables
-$chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-$localChromePath = "$PSScriptRoot\chrome_installer.msi"
-
-# 🚀 Step 1: Retrieve latest version from ChromiumDash API
 Write-Host "🔄 Fetching latest Chrome version from ChromiumDash API..."
 try {
-    $apiUrl = "https://chromiumdash.appspot.com/fetch_releases?platform=Windows&channel=Stable"
-    $response = Invoke-RestMethod -Uri $apiUrl -Method Get
-    $latestVersion = $response.releases[0].version
+    # Fetch latest Chrome version
+    $response = Invoke-RestMethod -Uri $apiUrl -Method Get -Headers @{"Cache-Control"="no-cache"}
+
+    # Debugging: Print API Response
+    Write-Host "DEBUG: API Raw Response - $($response | ConvertTo-Json -Depth 10)"
+
+    # Extract latest stable version from the first entry
+    $latestVersion = $response | Select-Object -First 1 -ExpandProperty version
 
     if (-not $latestVersion) {
-        throw "No stable Windows version found!"
+        throw "❌ No stable Windows version found!"
     }
 
-    Write-Host "🌍 Latest Chrome version from API: $latestVersion"
+    Write-Host "✅ Latest Chrome version: $latestVersion"
 } catch {
-    Write-Error "❌ ERROR: Could not retrieve version from Google!"
+    Write-Error "❌ ERROR: Could not retrieve version from Google API!"
     exit 1
 }
 
-# 🚀 Step 2: Retrieve current version from Azure
-Write-Host "🔄 Retrieving version from Azure..."
-$blobList = az storage blob list `
-    --container-name $AzureContainer `
-    --account-name $AzureStorageAccount `
-    --account-key $AzureStorageKey `
-    --output json | ConvertFrom-Json
-
-$existingCab = $blobList | Where-Object { $_.name -match "chrome_update_(\d+\.\d+\.\d+\.\d+)\.cab" }
-if ($existingCab) {
-    $azureVersion = [regex]::Match($existingCab.name, "chrome_update_(\d+\.\d+\.\d+\.\d+).cab").Groups[1].Value
-    Write-Host "✅ Version found on Azure: $azureVersion"
-} else {
-    Write-Host "⚠️ No existing version found on Azure. Assuming first-time upload."
-    $azureVersion = "0.0.0.0"
+# Check if Chrome is already installed
+$installedVersion = $null
+try {
+    $installedVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome").DisplayVersion
+} catch {
+    Write-Host "⚠️ Chrome is not installed."
 }
 
-# 🚀 Step 3: Compare versions and decide if update is needed
-if ($latestVersion -le $azureVersion) {
-    Write-Host "✅ Chrome is already updated on Azure. No action needed."
+if ($installedVersion -eq $latestVersion) {
+    Write-Host "✅ Chrome is already up to date ($latestVersion). No action needed."
     exit 0
 }
 
-Write-Host "🚀 New version found! Downloading and creating CAB file..."
-
-# 🚀 Step 4: Download the latest Chrome MSI
-Write-Host "🔄 Downloading Chrome MSI..."
-Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
-
-# 🚀 Step 5: Verify MSI download
-if (-not (Test-Path $localChromePath)) {
-    Write-Error "❌ ERROR: Chrome MSI download failed!"
+# Download Chrome MSI
+Write-Host "🔄 Downloading Chrome MSI from: $chromeDownloadUrl"
+try {
+    Invoke-WebRequest -Uri $chromeDownloadUrl -OutFile $msiPath
+    Write-Host "✅ Chrome MSI downloaded successfully."
+} catch {
+    Write-Error "❌ ERROR: Failed to download Chrome MSI!"
     exit 1
 }
 
-# 🚀 Step 6: Create CAB file
-$cabFileName = "chrome_update_$latestVersion.cab"
-$localCabPath = "$PSScriptRoot\$cabFileName"
+# Extract MSI version info
+Write-Host "🔄 Extracting Chrome version from MSI file..."
+try {
+    $msiVersion = (Get-Item $msiPath).VersionInfo.FileVersion
 
-Write-Host "🔄 Creating CAB file..."
-MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
+    if (-not $msiVersion) {
+        Write-Host "⚠️ FileVersion is EMPTY. Trying ProductVersion..."
+        $msiVersion = (Get-ItemProperty $msiPath).ProductVersion
+    }
 
-# 🚀 Step 7: Verify CAB file creation
-if (-not (Test-Path $localCabPath)) {
-    Write-Error "❌ ERROR: CAB file was NOT created correctly!"
+    if (-not $msiVersion) {
+        Write-Host "⚠️ ProductVersion is also EMPTY. Trying 'Comments' field..."
+        $msiVersion = (Get-Item $msiPath).VersionInfo.Comments
+    }
+
+    if (-not $msiVersion) {
+        throw "❌ ERROR: Could not extract version from MSI!"
+    }
+
+    Write-Host "✅ Extracted Chrome MSI version: $msiVersion"
+} catch {
+    Write-Error $_
     exit 1
 }
 
-Write-Host "✅ CAB file created: $cabFileName"
+# Compare downloaded MSI version with latest version
+if ($msiVersion -ne $latestVersion) {
+    Write-Error "❌ ERROR: Downloaded MSI version ($msiVersion) does NOT match latest version ($latestVersion)!"
+    exit 1
+}
 
-# 🚀 Step 8: Upload CAB file to Azure Storage
-Write-Host "☁️ Uploading CAB file to Azure..."
-az storage blob upload `
-    --container-name $AzureContainer `
-    --account-name $AzureStorageAccount `
-    --account-key $AzureStorageKey `
-    --file $localCabPath `
-    --name $cabFileName `
-    --overwrite
+# Install Chrome MSI
+Write-Host "🔄 Installing Chrome MSI..."
+try {
+    Start-Process "msiexec.exe" -ArgumentList "/i $msiPath /qn /norestart" -Wait -NoNewWindow
+    Write-Host "✅ Chrome installed successfully."
+} catch {
+    Write-Error "❌ ERROR: Failed to install Chrome!"
+    exit 1
+}
 
-Write-Host "✅ CAB file uploaded successfully."
-
-exit 0
+# Verify installation
+$installedVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome").DisplayVersion
+if ($installedVersion -eq $latestVersion) {
+    Write-Host "🎉 Chrome updated successfully to version: $installedVersion"
+} else {
+    Write-Error "❌ ERROR: Chrome update verification failed! Installed version: $installedVersion"
+    exit 1
+}
