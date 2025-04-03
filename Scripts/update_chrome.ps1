@@ -10,23 +10,8 @@ param (
 # 🚀 Variables
 $chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "$PSScriptRoot\chrome_installer.msi"
-$latestVersionFile = "$PSScriptRoot\latest_chrome_version.txt"
 
-# 🚀 Step 1: Retrieve current version from GitHub (local version file)
-Write-Host "🔄 Retrieving version from GitHub..."
-if (Test-Path $latestVersionFile) {
-    $currentVersion = Get-Content $latestVersionFile
-    if (-not $currentVersion) {
-        Write-Host "⚠️ Version file is empty. Assuming first-time setup."
-        $currentVersion = "0.0.0.0"
-    }
-    Write-Host "✅ Retrieved version from GitHub: $currentVersion"
-} else {
-    Write-Host "⚠️ No version file found. Assuming first-time setup."
-    $currentVersion = "0.0.0.0"
-}
-
-# 🚀 Step 2: Retrieve current version from Azure Storage
+# 🚀 Step 1: Retrieve current version from Azure
 Write-Host "🔄 Retrieving version from Azure..."
 $blobList = az storage blob list `
     --container-name $AzureContainer `
@@ -39,17 +24,17 @@ if ($existingCab) {
     $azureVersion = [regex]::Match($existingCab.name, "chrome_update_(\d+\.\d+\.\d+\.\d+).cab").Groups[1].Value
     Write-Host "✅ Version found on Azure: $azureVersion"
 } else {
-    Write-Host "⚠️ Could not retrieve version from Azure. Assuming first-time upload."
+    Write-Host "⚠️ No existing version found on Azure. Assuming first-time upload."
     $azureVersion = "0.0.0.0"
 }
 
-# 🚀 Step 3: Download the latest Chrome MSI
+# 🚀 Step 2: Download the latest Chrome MSI
 Write-Host "🔄 Downloading Chrome MSI..."
 Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
 
-# 🚀 Step 4: Extract Chrome version from MSI
+# 🚀 Step 3: Extract Chrome version from MSI (RESTORED WORKING METHOD)
 Write-Host "🔄 Extracting Chrome version from MSI file..."
-$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.ProductVersion
+$msiVersion = (Get-ItemProperty -Path $localChromePath).VersionInfo.FileVersion
 
 if (-not $msiVersion) {
     Write-Error "❌ ERROR: Could not extract version from MSI!"
@@ -58,7 +43,7 @@ if (-not $msiVersion) {
 
 Write-Host "🌍 Latest Chrome version: $msiVersion"
 
-# 🚀 Step 5: Compare versions and decide if update is needed
+# 🚀 Step 4: Compare versions and decide if update is needed
 if ($msiVersion -le $azureVersion) {
     Write-Host "✅ Chrome is already updated on Azure. No action needed."
     exit 0
@@ -68,11 +53,10 @@ Write-Host "🚀 New version found! Creating CAB file..."
 $cabFileName = "chrome_update_$msiVersion.cab"
 $localCabPath = "$PSScriptRoot\$cabFileName"
 
-# 🚀 Step 6: Create CAB file
-Write-Host "📦 Creating CAB file..."
+# 🚀 Step 5: Create CAB file
 MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
 
-# 🚀 Step 7: Verify CAB file exists
+# 🚀 Step 6: Verify CAB file exists
 if (-not (Test-Path $localCabPath)) {
     Write-Error "❌ ERROR: CAB file was NOT created correctly!"
     exit 1
@@ -80,7 +64,7 @@ if (-not (Test-Path $localCabPath)) {
 
 Write-Host "✅ CAB file created: $cabFileName"
 
-# 🚀 Step 8: Upload CAB file to Azure Storage
+# 🚀 Step 7: Upload CAB file to Azure Storage
 Write-Host "☁️ Uploading CAB file to Azure..."
 az storage blob upload `
     --container-name $AzureContainer `
@@ -91,17 +75,5 @@ az storage blob upload `
     --overwrite
 
 Write-Host "✅ CAB file uploaded successfully."
-
-# 🚀 Step 9: Update version file in GitHub
-Write-Host "📂 Updating version file in GitHub..."
-$msiVersion | Out-File -FilePath $latestVersionFile -Encoding utf8
-
-# 🚀 Step 10: Commit and push version file
-Write-Host "📂 Committing and pushing version file..."
-git add $latestVersionFile
-git commit -m "🔄 Updated latest Chrome version to $msiVersion"
-git push
-
-Write-Host "✅ Version file updated in GitHub."
 
 exit 0
