@@ -10,6 +10,14 @@ try {
     Write-Error "❌ ERROR: Failed to download Chrome Enterprise MSI!"
     exit 1
 }
+$msiPath = "$env:TEMP\googlechrome.msi"
+$msi = Get-Item $msiPath
+
+Write-Host "🔍 Debug: Full MSI Metadata"
+$msi | Format-List *  # Show all available metadata
+
+Write-Host "🔍 Debug: File Version Info"
+$msi.VersionInfo | Format-List *
 
 # Extract MSI version info
 Write-Host "🔄 Extracting Chrome version from MSI file..."
