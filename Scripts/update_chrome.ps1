@@ -1,5 +1,5 @@
 # update_chrome.ps1
-# Script to download the latest Chrome MSI, fetch version from Google API, create CAB, and upload to Azure Storage.
+# Script to fetch the latest Chrome version from ChromiumDash API, download MSI, create CAB, and upload to Azure.
 
 param (
     [string]$AzureStorageAccount = $env:AZURE_STORAGE_ACCOUNT_NAME,
@@ -11,15 +11,20 @@ param (
 $chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "$PSScriptRoot\chrome_installer.msi"
 
-# 🚀 Step 1: Retrieve latest version from Google API
-Write-Host "🔄 Fetching latest Chrome version from Google API..."
+# 🚀 Step 1: Retrieve latest version from ChromiumDash API
+Write-Host "🔄 Fetching latest Chrome version from ChromiumDash API..."
 try {
-    $apiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest"
+    $apiUrl = "https://chromiumdash.appspot.com/fetch_releases?platform=Windows&channel=Stable"
     $response = Invoke-RestMethod -Uri $apiUrl -Method Get
-    $latestVersion = $response.version
+    $latestVersion = $response.releases[0].version
+
+    if (-not $latestVersion) {
+        throw "No stable Windows version found!"
+    }
+
     Write-Host "🌍 Latest Chrome version from API: $latestVersion"
 } catch {
-    Write-Error "❌ ERROR: Could not retrieve version from Google API!"
+    Write-Error "❌ ERROR: Could not retrieve version from Google!"
     exit 1
 }
 
