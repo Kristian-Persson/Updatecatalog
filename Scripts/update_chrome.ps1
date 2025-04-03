@@ -1,5 +1,5 @@
 # update_chrome.ps1
-# Script to download the latest Chrome MSI, extract version, create a CAB file, and upload to Azure Storage.
+# Script to download the latest Chrome MSI, fetch version from Google API, create CAB, and upload to Azure Storage.
 
 param (
     [string]$AzureStorageAccount = $env:AZURE_STORAGE_ACCOUNT_NAME,
@@ -11,7 +11,19 @@ param (
 $chromeMsiUrl = "https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $localChromePath = "$PSScriptRoot\chrome_installer.msi"
 
-# 🚀 Step 1: Retrieve current version from Azure
+# 🚀 Step 1: Retrieve latest version from Google API
+Write-Host "🔄 Fetching latest Chrome version from Google API..."
+try {
+    $apiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions/latest"
+    $response = Invoke-RestMethod -Uri $apiUrl -Method Get
+    $latestVersion = $response.version
+    Write-Host "🌍 Latest Chrome version from API: $latestVersion"
+} catch {
+    Write-Error "❌ ERROR: Could not retrieve version from Google API!"
+    exit 1
+}
+
+# 🚀 Step 2: Retrieve current version from Azure
 Write-Host "🔄 Retrieving version from Azure..."
 $blobList = az storage blob list `
     --container-name $AzureContainer `
@@ -28,73 +40,32 @@ if ($existingCab) {
     $azureVersion = "0.0.0.0"
 }
 
-# 🚀 Step 2: Download the latest Chrome MSI
-Write-Host "🔄 Downloading Chrome MSI..."
-Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
-
-# 🚀 Step 3: Extract Chrome version from MSI
-Write-Host "🔄 Extracting Chrome version from MSI file..."
-
-# 🛠 Try multiple ways to extract version
-$msiVersion = $null
-
-# Method 1: Use Get-ItemProperty
-$msiItem = Get-Item -Path $localChromePath
-$msiInfo = $msiItem.VersionInfo
-
-if ($msiInfo.FileVersion) {
-    $msiVersion = $msiInfo.FileVersion
-    Write-Host "✅ Extracted FileVersion: $msiVersion"
-} elseif ($msiInfo.ProductVersion) {
-    $msiVersion = $msiInfo.ProductVersion
-    Write-Host "✅ Extracted ProductVersion: $msiVersion"
-} else {
-    Write-Host "⚠️ FileVersion & ProductVersion are empty. Trying 'Comments' field..."
-}
-
-# Method 2: Extract from Comments metadata using Shell.Application
-if (-not $msiVersion) {
-    try {
-        $shell = New-Object -ComObject Shell.Application
-        $folder = $shell.Namespace((Get-Item $localChromePath).DirectoryName)
-        $file = $folder.ParseName((Get-Item $localChromePath).Name)
-        
-        for ($i = 0; $i -lt 300; $i++) {
-            $property = $folder.GetDetailsOf($file, $i)
-            if ($property -match "(\d+\.\d+\.\d+\.\d+)") {
-                $msiVersion = $matches[1]
-                Write-Host "✅ Extracted version from Comments field: $msiVersion"
-                break
-            }
-        }
-    } catch {
-        Write-Host "⚠️ Failed to extract version from Comments field."
-    }
-}
-
-# Final check
-if (-not $msiVersion) {
-    Write-Error "❌ ERROR: Could not extract version from MSI!"
-    exit 1
-}
-
-Write-Host "🌍 Latest Chrome version: $msiVersion"
-
-# 🚀 Step 4: Compare versions and decide if update is needed
-if ($msiVersion -le $azureVersion) {
+# 🚀 Step 3: Compare versions and decide if update is needed
+if ($latestVersion -le $azureVersion) {
     Write-Host "✅ Chrome is already updated on Azure. No action needed."
     exit 0
 }
 
-Write-Host "🚀 New version found! Creating CAB file..."
-$cabFileName = "chrome_update_$msiVersion.cab"
+Write-Host "🚀 New version found! Downloading and creating CAB file..."
+
+# 🚀 Step 4: Download the latest Chrome MSI
+Write-Host "🔄 Downloading Chrome MSI..."
+Invoke-WebRequest -Uri $chromeMsiUrl -OutFile $localChromePath
+
+# 🚀 Step 5: Verify MSI download
+if (-not (Test-Path $localChromePath)) {
+    Write-Error "❌ ERROR: Chrome MSI download failed!"
+    exit 1
+}
+
+# 🚀 Step 6: Create CAB file
+$cabFileName = "chrome_update_$latestVersion.cab"
 $localCabPath = "$PSScriptRoot\$cabFileName"
 
-# 🚀 Step 5: Create CAB file
 Write-Host "🔄 Creating CAB file..."
 MakeCab -SourceFile $localChromePath -DestinationFile $localCabPath
 
-# 🚀 Step 6: Verify CAB file exists
+# 🚀 Step 7: Verify CAB file creation
 if (-not (Test-Path $localCabPath)) {
     Write-Error "❌ ERROR: CAB file was NOT created correctly!"
     exit 1
@@ -102,7 +73,7 @@ if (-not (Test-Path $localCabPath)) {
 
 Write-Host "✅ CAB file created: $cabFileName"
 
-# 🚀 Step 7: Upload CAB file to Azure Storage
+# 🚀 Step 8: Upload CAB file to Azure Storage
 Write-Host "☁️ Uploading CAB file to Azure..."
 az storage blob upload `
     --container-name $AzureContainer `
