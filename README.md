@@ -1,6 +1,17 @@
+
 # Patchr.Studio
 
 Det här repot är ett tidigt proof-of-concept för en **third-party update catalog** till SCCM.
+
+=======
+# Updatecatalog
+
+Det här repot är ett tidigt proof-of-concept för en **third-party update catalog** till SCCM.
+
+
+Preview 
+https://kristian-persson.github.io/Updatecatalog/
+
 
 ## Nuvarande innehåll
 
@@ -55,6 +66,11 @@ Det här repot är ett tidigt proof-of-concept för en **third-party update cata
 
 Se även `docs/solution-outline.md` för mer detaljerad krav- och designskiss.
 
+
+=======
+=======
+
+
 För Stripe-specifik startchecklista, se `docs/stripe-onboarding.md`.
 
 
@@ -100,3 +116,6 @@ Om målet är att gå från idé till körbar MVP snabbt, gör detta i ordning:
 - Dag 5: Databasmodell + migrationer.
 - Dag 6: Enkel “latest versions”-vy.
 - Dag 7: Deploy + smoke-test + backlog för automation.
+
+=======
+
